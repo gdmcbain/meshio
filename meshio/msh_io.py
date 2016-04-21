@@ -68,7 +68,7 @@ def read(filename):
                     if number_of_tags >= 1:
                         cell_data['physical'][data[0] - 1] = data[3]
                         if number_of_tags >= 2:
-                            cell_data['elementary'][data[0]] = data[4]
+                            cell_data['elementary'][data[0] - 1] = data[4]
                             if number_of_tags >= 3:
                                 number_of_partitions = data[5]
 
