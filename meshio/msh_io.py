@@ -43,7 +43,7 @@ def read(filename):
                 line = islice(f, 1).next()
                 num_cells = int(line)
                 cells = {}
-                cell_data = {tag: np.empty(num_cells, dtype=np.uint8)
+                cell_data = {tag: numpy.empty(num_cells, dtype=numpy.uint8)
                              for tag in ['physical', 'elementary']}
                 gmsh_to_meshio_type = {
                         15: ('vertex', 1),
