@@ -43,6 +43,7 @@ def read(filename):
                 line = islice(f, 1).next()
                 num_cells = int(line)
                 cells = {}
+                cell_data = {}
                 gmsh_to_meshio_type = {
                         15: ('vertex', 1),
                         1: ('line', 2),
@@ -62,6 +63,9 @@ def read(filename):
                         cells[t[0]].append(data[-t[1]:] - 1)
                     else:
                         cells[t[0]] = [data[-t[1]:] - 1]
+                    number_of_tags = t[2]
+                    if number_of_tags >= 1:
+                        pass    # TODO: Process tags
 
                 line = islice(f, 1).next()
                 assert(line.strip() == '$EndElements')
