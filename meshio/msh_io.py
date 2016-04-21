@@ -15,6 +15,10 @@ def read(filename):
     '''
     # The format is specified at
     # <http://geuz.org/gmsh/doc/texinfo/gmsh.html#MSH-ASCII-file-format>.
+    point_data = {}
+    cell_data = {}
+    field_data = {}
+    
     with open(filename) as f:
         while True:
             try:
@@ -43,8 +47,8 @@ def read(filename):
                 line = islice(f, 1).next()
                 num_cells = int(line)
                 cells = {}
-                cell_data = {tag: numpy.empty(num_cells, dtype=numpy.uint8)
-                             for tag in ['physical', 'elementary']}
+                for tag in ['physical', 'elementary']:
+                    cell_data[tag] = numpy.empty(num_cells, dtype=numpy.uint8)
                 gmsh_to_meshio_type = {
                         15: ('vertex', 1),
                         1: ('line', 2),
@@ -81,8 +85,11 @@ def read(filename):
             elif environ == 'PhysicalNames':
                 line = islice(f, 1).next()
                 num_phys_names = int(line)
+                field_data['physical_names'] = ({}, {}, {})
                 for k, line in enumerate(islice(f, num_phys_names)):
-                    pass
+                    data = line.split()
+                    field_data['physical_names'][
+                        int(data[0]) - 1][data[1]] = data[2]
                 line = islice(f, 1).next()
                 assert(line.strip() == '$EndPhysicalNames')
             else:
@@ -91,8 +98,6 @@ def read(filename):
     for key in cells:
         cells[key] = numpy.vstack(cells[key])
 
-    point_data = {}
-    field_data = {}
     return points, cells, point_data, cell_data, field_data
 
 
