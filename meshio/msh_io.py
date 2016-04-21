@@ -43,7 +43,8 @@ def read(filename):
                 line = islice(f, 1).next()
                 num_cells = int(line)
                 cells = {}
-                cell_data = {}
+                cell_data = {tag: np.empty(num_cells, dtype=np.uint8)
+                             for tag in ['physical', 'elementary']}
                 gmsh_to_meshio_type = {
                         15: ('vertex', 1),
                         1: ('line', 2),
@@ -65,7 +66,15 @@ def read(filename):
                         cells[t[0]] = [data[-t[1]:] - 1]
                     number_of_tags = t[2]
                     if number_of_tags >= 1:
-                        pass    # TODO: Process tags
+                        cell_data['physical'][t[0] - 1] = t[3]
+                        if number_of_tags >= 2:
+                            cell_data['elementary'][t[0]] = t[4]
+                            if number_of_tags >= 3:
+                                number_of_partitions = t[5]
+
+                                # TODO gmcbain 2016-04-21: Worry about
+                                # t[5] partitions encoded in
+                                # t[6:(6+t[2]-3)]?
 
                 line = islice(f, 1).next()
                 assert(line.strip() == '$EndElements')
@@ -82,7 +91,9 @@ def read(filename):
     for key in cells:
         cells[key] = numpy.vstack(cells[key])
 
-    return points, cells, {}, {}, {}
+    point_data = {}
+    field_data = {}
+    return points, cells, point_data, cell_data, field_data
 
 
 def write(
