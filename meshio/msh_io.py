@@ -89,7 +89,7 @@ def read(filename):
                 for k, line in enumerate(islice(f, num_phys_names)):
                     data = line.split()
                     field_data['physical_names'][
-                        int(data[0]) - 1][data[1]] = data[2].strip('"')
+                        int(data[0]) - 1][int(data[1])] = data[2].strip('"')
                 line = islice(f, 1).next()
                 assert(line.strip() == '$EndPhysicalNames')
             else:
