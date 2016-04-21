@@ -48,7 +48,7 @@ def read(filename):
                 num_cells = int(line)
                 cells = {}
                 for tag in ['physical', 'elementary']:
-                    cell_data[tag] = numpy.empty(num_cells, dtype=numpy.uint8)
+                    cell_data[tag] = numpy.empty(num_cells, dtype=int)
                 gmsh_to_meshio_type = {
                         15: ('vertex', 1),
                         1: ('line', 2),
