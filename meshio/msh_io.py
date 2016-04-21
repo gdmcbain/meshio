@@ -47,8 +47,7 @@ def read(filename):
                 line = islice(f, 1).next()
                 num_cells = int(line)
                 cells = {}
-                for tag in ['physical', 'elementary']:
-                    cell_data[tag] = numpy.empty(num_cells, dtype=int)
+                cell_data = {'physical': {}, 'elementary': {}}
                 gmsh_to_meshio_type = {
                         15: ('vertex', 1),
                         1: ('line', 2),
@@ -70,9 +69,15 @@ def read(filename):
                         cells[t[0]] = [data[-t[1]:] - 1]
                     number_of_tags = data[2]
                     if number_of_tags >= 1:
-                        cell_data['physical'][data[0] - 1] = data[3]
+                        if t[0] in cell_data['physical']:
+                            cell_data['physical'][t[0]].append(data[3])
+                        else:
+                            cell_data['physical'][t[0]] = [data[3]]
                         if number_of_tags >= 2:
-                            cell_data['elementary'][data[0] - 1] = data[4]
+                            if t[0] in cell_data['elementary']:
+                                cell_data['elementary'][t[0]].append(data[4])
+                            else:
+                                cell_data['elementary'][t[0]] = [data[4]]
                             if number_of_tags >= 3:
                                 number_of_partitions = data[5]
 
