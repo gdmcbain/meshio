@@ -89,7 +89,7 @@ num_nodes_per_cell = {
 }
 
 # Translate meshio types to gmsh codes
-# http://gmsh.info//doc/texinfo/gmsh.html#MSH-ASCII-file-format
+# http://gmsh.info//doc/texinfo/gmsh.html#MSH-file-format-_0028version-4_0029
 _gmsh_to_meshio_type = {
     1: "line",
     2: "triangle",
@@ -287,7 +287,7 @@ def _read_cells_ascii(f, cells, cell_tags, total_num_cells):
         cells[t].append(data[-num_nodes_per_elem:])
 
         # data[2] gives the number of tags. The gmsh manual
-        # <http://gmsh.info/doc/texinfo/gmsh.html#MSH-ASCII-file-format>
+        # <http://gmsh.info//doc/texinfo/gmsh.html#MSH-file-format-version-2>
         # says:
         # >>>
         # By default, the first tag is the number of the physical entity to
@@ -426,7 +426,7 @@ def _read_data(f, tag, data_dict, int_size, data_size, is_ascii):
 
 def read_buffer(f):
     # The format is specified at
-    # <http://gmsh.info//doc/texinfo/gmsh.html#MSH-ASCII-file-format>.
+    # <http://gmsh.info//doc/texinfo/gmsh.html#File-formats>.
 
     # Initialize the optional data fields
     points = []
@@ -612,7 +612,7 @@ def _write_periodic(fh, periodic):
 
 def _write_data(fh, tag, name, data, write_binary):
     fh.write("${}\n".format(tag).encode("utf-8"))
-    # <http://gmsh.info/doc/texinfo/gmsh.html>:
+    # <http://gmsh.info//doc/texinfo/gmsh.html#MSH-file-format-version-2>:
     # > Number of string tags.
     # > gives the number of string tags that follow. By default the first
     # > string-tag is interpreted as the name of the post-processing view and
@@ -666,7 +666,7 @@ def _write_data(fh, tag, name, data, write_binary):
 
 def write(filename, mesh, write_binary=True):
     """Writes msh files, cf.
-    <http://gmsh.info//doc/texinfo/gmsh.html#MSH-ASCII-file-format>.
+    <http://gmsh.info//doc/texinfo/gmsh.html#MSH-file-format-version-2>.
     """
     if write_binary:
         for key, value in mesh.cells.items():
