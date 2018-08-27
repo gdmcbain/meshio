@@ -4,6 +4,7 @@
 I/O for Gmsh's msh format, cf.
 <http://gmsh.info//doc/texinfo/gmsh.html#File-formats>.
 """
+import ctypes
 import logging
 import struct
 
@@ -438,7 +439,7 @@ def read_buffer(f):
     periodic = None
 
     is_ascii = None
-    int_size = 4
+    int_size = ctypes.sizeof(ctypes.c_int)
     data_size = None
     while True:
         line = f.readline().decode("utf-8")
