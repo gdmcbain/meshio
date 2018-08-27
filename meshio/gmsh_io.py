@@ -170,10 +170,12 @@ def read(filename):
 def _read_header(f, int_size):
     line = f.readline().decode("utf-8")
     # Split the line
-    # 2.2 0 8
+    # version(double) binary(int) size(unsigned long)
     # into its components.
     str_list = list(filter(None, line.split()))
-    assert str_list[0][0] == "2", "Need mesh format 2"
+    version = float(str_list[0])
+    if round(version) not in [2, 4]:
+        raise NotImplementedError(f"MSH format version {version}")
     assert str_list[1] in ["0", "1"]
     is_ascii = str_list[1] == "0"
     data_size = int(str_list[2])
@@ -186,7 +188,7 @@ def _read_header(f, int_size):
         assert line == "\n"
     line = f.readline().decode("utf-8")
     assert line.strip() == "$EndMeshFormat"
-    return data_size, is_ascii
+    return version, is_ascii, data_size
 
 
 def _read_physical_names(f, field_data):
@@ -450,7 +452,7 @@ def read_buffer(f):
         environ = line[1:].strip()
 
         if environ == "MeshFormat":
-            data_size, is_ascii = _read_header(f, int_size)
+            msh_version, is_ascii, data_size = _read_header(f, int_size)
         elif environ == "PhysicalNames":
             _read_physical_names(f, field_data)
         elif environ == "Nodes":
