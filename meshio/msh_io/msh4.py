@@ -97,8 +97,8 @@ def _read_nodes(f, is_ascii, int_size, data_size):
         line = f.readline().decode("utf-8")
         num_entity_blocks, total_num_nodes = [int(k) for k in line.split()]
     else:
-        line = f.read(struct.calcsize("LL"))
-        num_entity_blocks, total_num_nodes = struct.unpack("LL", line)
+        line = f.read(struct.calcsize("!2L"))
+        num_entity_blocks, total_num_nodes = struct.unpack("!2L", line)
 
     points = numpy.empty((total_num_nodes, 3), dtype=float)
     tags = numpy.empty(total_num_nodes, dtype=int)
@@ -111,8 +111,8 @@ def _read_nodes(f, is_ascii, int_size, data_size):
             line = f.readline().decode("utf-8")
             tag_entity, dim_entity, type_node, num_nodes = map(int, line.split())
         else:
-            line = f.read(struct.calcsize("4i")))
-            tag_entity, dim_entity, type_node, num_nodes = struct.unpack("4i", line)
+            line = f.read(struct.calcsize("!3iL"))
+            tag_entity, dim_entity, type_node, num_nodes = struct.unpack("!3iL", line)
         for i in range(num_nodes):
             # tag(int) x(double) y(double) z(double)
             if is_ascii:
@@ -120,7 +120,7 @@ def _read_nodes(f, is_ascii, int_size, data_size):
                 tag, x, y, z = line.split()
                 points[idx] = [float(x), float(y), float(z)]
             else:
-                line = f.read(struct.calcsize("i3d")))
+                line = f.read(struct.calcsize("i3d"))
                 tag, x, y, z = struct.unpack("i3d", line)
                 points[idx] = [x, y, z]
             tags[idx] = tag
