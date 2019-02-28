@@ -23,7 +23,6 @@ from .common import (
 )
 from ..mesh import Mesh
 from ..common import num_nodes_per_cell, cell_data_from_raw, raw_from_cell_data
-from .msh2 import write as write2  # revert where necessary; TODO: drop this
 
 
 def read_buffer(f, is_ascii, int_size, data_size):
@@ -225,11 +224,6 @@ def _read_cells(f, point_tags, int_size, is_ascii, physical_tags):
 
 
 def write(filename, mesh, write_binary=True):
-    logging.warning("Writing MSH4.1 unimplemented, falling back on MSH2")
-    write2(filename, mesh, write_binary=write_binary)
-
-
-def write4_1(filename, mesh, write_binary=True):
     """Writes msh files, cf.
     <http://gmsh.info//doc/texinfo/gmsh.html#MSH-ASCII-file-format>.
     """
@@ -275,7 +269,7 @@ def write4_1(filename, mesh, write_binary=True):
         if mesh.field_data:
             _write_physical_names(fh, mesh.field_data)
 
-        _write_entities(fh, cells, write_binary)
+        # TODO: _write_entities
         _write_nodes(fh, mesh.points, write_binary)
         _write_elements(fh, cells, write_binary)
         if mesh.gmsh_periodic is not None:
@@ -353,7 +347,7 @@ def _write_nodes(fh, points, write_binary):
         fh.write("{} {} {} {}\n".format(dim_entity, 1, 0, len(points)).encode("utf-8"))
         numpy.arange(1, 1 + len(points), dtype=c_size_t).tofile(fh, "\n", "%d")
         fh.write("\n".encode("utf-8"))
-        numpy.savetxt(fh, points, "%d", " ", encoding="utf-8")
+        numpy.savetxt(fh, points, "%g", " ", encoding="utf-8")
 
     fh.write("$EndNodes\n".encode("utf-8"))
     return
