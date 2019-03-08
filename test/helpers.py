@@ -274,20 +274,36 @@ def write_read(writer, reader, input_mesh, atol):
 
     # We cannot compare the exact rows here since the order of the points might
     # have changes. Just compare the sums
-    assert numpy.allclose(input_mesh.points, mesh.points, atol=atol, rtol=0.0)
+    assert numpy.allclose(
+        input_mesh.points,
+        mesh.points[:, :2] if input_mesh.points.shape[1] == 2 else mesh.points,
+        atol=atol,
+        rtol=0.0,
+    )
 
     for cell_type, data in input_mesh.cells.items():
         assert numpy.allclose(data, mesh.cells[cell_type])
 
     for key in input_mesh.point_data.keys():
+        if (len(input_mesh.point_data[key].shape) == 2
+            and input_mesh.point_data[key].shape[1] == 2):
+            point_data = mesh.point_data[key][:, :2]
+        else:
+            point_data = mesh.point_data[key]
+
         assert numpy.allclose(
-            input_mesh.point_data[key], mesh.point_data[key], atol=atol, rtol=0.0
+            input_mesh.point_data[key], point_data, atol=atol, rtol=0.0
         )
 
     for cell_type, cell_type_data in input_mesh.cell_data.items():
         for key, data in cell_type_data.items():
+            if (len(input_mesh.cell_data[cell_type][key].shape) == 2
+                and input_mesh.cell_data[cell_type][key].shape[1] == 2):
+                cell_data = mesh.cell_data[cell_type][key][:, :2]
+            else:
+                cell_data = mesh.cell_data[cell_type][key]
             assert numpy.allclose(
-                data, mesh.cell_data[cell_type][key], atol=atol, rtol=0.0
+                data, cell_data, atol=atol, rtol=0.0
             )
 
     for name, data in input_mesh.field_data.items():
