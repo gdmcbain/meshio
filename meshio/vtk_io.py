@@ -425,8 +425,9 @@ def write(filename, mesh, write_binary=True):
             "VTK requires 3D points, but 2D points given. "
             "Appending 0 third component."
         )
-        mesh.points = pad(mesh.points)
+        points = pad(mesh.points)
 
+        point_data = {}
         if mesh.point_data:
             for name, values in mesh.point_data.items():
                 if values.shape[1] == 2:
@@ -434,17 +435,27 @@ def write(filename, mesh, write_binary=True):
                         "VTK requires 3D vectors, but 2D vectors given. "
                         "Appending 0 third component to {}.".format(name)
                     )
-                    mesh.point_data[name] = pad(values)
+                    point_data[name] = pad(values)
+                else:
+                    point_data[name] = values
+        cell_data = {}
         if mesh.cell_data:
             for t, data in mesh.cell_data.items():
+                cell_data[t] = {}
                 for name, values in data.items():
                     if values.shape[1] == 2:
                         logging.warning(
                             "VTK requires 3D vectors, but 2D vectors given. "
                             "Appending 0 third component to {}.".format(name)
                         )
-                    mesh.cell_data[t][name] = pad(mesh.cell_data[t][name])
-
+                        cell_data[t][name] = pad(mesh.cell_data[t][name])
+                    else:
+                        cell_data[t][name] = mesh.cell_data[t][name]
+    else:
+        points = mesh.points
+        point_data = mesh.point_data
+        cell_data = mesh.cell_data
+                    
     if not write_binary:
         logging.warning("VTK ASCII files are only meant for debugging.")
 
@@ -455,19 +466,19 @@ def write(filename, mesh, write_binary=True):
         f.write("DATASET UNSTRUCTURED_GRID\n".encode("utf-8"))
 
         # write points and cells
-        _write_points(f, mesh.points, write_binary)
+        _write_points(f, points, write_binary)
         _write_cells(f, mesh.cells, write_binary)
 
         # write point data
-        if mesh.point_data:
+        if point_data:
             num_points = mesh.points.shape[0]
             f.write("POINT_DATA {}\n".format(num_points).encode("utf-8"))
-            _write_field_data(f, mesh.point_data, write_binary)
+            _write_field_data(f, point_data, write_binary)
 
         # write cell data
-        if mesh.cell_data:
+        if cell_data:
             total_num_cells = sum([len(c) for c in mesh.cells.values()])
-            cell_data_raw = raw_from_cell_data(mesh.cell_data)
+            cell_data_raw = raw_from_cell_data(cell_data)
             f.write("CELL_DATA {}\n".format(total_num_cells).encode("utf-8"))
             _write_field_data(f, cell_data_raw, write_binary)
 
