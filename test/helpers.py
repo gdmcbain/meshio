@@ -258,10 +258,11 @@ def add_node_sets(mesh):
 def write_read(writer, reader, input_mesh, atol):
     """Write and read a file, and make sure the data is the same as before.
     """
-    with tempfile.TemporaryDirectory() as temp_dir:
-        filepath = os.path.join(temp_dir, "test.dat")
-        writer(filepath, input_mesh)
-        mesh = reader(filepath)
+    with tempfile.NamedTemporaryFile(suffix=".dat") as f:
+    # with tempfile.TemporaryDirectory() as temp_dir:
+    #     filepath = os.path.join(temp_dir, "test.dat")
+        writer(f.name, input_mesh)
+        mesh = reader(f.name)
 
     # Make sure the output is writeable
     assert mesh.points.flags["WRITEABLE"]
