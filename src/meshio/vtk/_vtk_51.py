@@ -2,6 +2,7 @@ from functools import reduce
 
 import numpy as np
 
+from .. import _meshlike
 from ..__about__ import __version__
 from .._common import info, join_strings, replace_space, warn
 from .._exceptions import ReadError, WriteError
@@ -490,23 +491,38 @@ def write(filename, mesh, binary=True):
     else:
         points = mesh.points
 
+    # Writers observe their input; they must not mutate it. Build local copies of
+    # any state this format needs to transform (see _meshlike).
+    point_data = mesh.point_data
+    cell_data = mesh.cell_data
+    cells = mesh.cells
+
     if mesh.point_data:
+        new_point_data = {}
         for name, values in mesh.point_data.items():
             if len(values.shape) == 2 and values.shape[1] == 2:
                 warn(
                     "VTK requires 3D vectors, but 2D vectors given. "
                     f"Appending 0 third component to {name}."
                 )
-                mesh.point_data[name] = _pad(values)
+                new_point_data[name] = _pad(values)
+            else:
+                new_point_data[name] = values
+        point_data = new_point_data
 
-    for name, data in mesh.cell_data.items():
-        for k, values in enumerate(data):
-            if len(values.shape) == 2 and values.shape[1] == 2:
-                warn(
-                    "VTK requires 3D vectors, but 2D vectors given. "
-                    f"Appending 0 third component to {name}."
-                )
-                data[k] = _pad(data[k])
+    if mesh.cell_data:
+        new_cell_data = {}
+        for name, data in mesh.cell_data.items():
+            new_list = list(data)
+            for k, values in enumerate(data):
+                if len(values.shape) == 2 and values.shape[1] == 2:
+                    warn(
+                        "VTK requires 3D vectors, but 2D vectors given. "
+                        f"Appending 0 third component to {name}."
+                    )
+                    new_list[k] = _pad(values)
+            new_cell_data[name] = new_list
+        cell_data = new_cell_data
 
     if not binary:
         warn("VTK ASCII files are only meant for debugging.")
@@ -518,7 +534,10 @@ def write(filename, mesh, binary=True):
         )
         key, _ = join_strings(list(mesh.point_sets.keys()))
         key, _ = replace_space(key)
-        mesh.point_sets_to_data(key)
+        result = _meshlike.point_sets_to_data(mesh, join_char=key)
+        if result is not None:
+            name, intfun = result
+            point_data = {**point_data, name: intfun}
 
     if mesh.cell_sets:
         info(
@@ -527,7 +546,10 @@ def write(filename, mesh, binary=True):
         )
         key, _ = join_strings(list(mesh.cell_sets.keys()))
         key, _ = replace_space(key)
-        mesh.cell_sets_to_data(key)
+        result = _meshlike.cell_sets_to_data(mesh, data_name=key)
+        if result is not None:
+            name, intfun = result
+            cell_data = {**cell_data, name: intfun}
 
     with open_file(filename, "wb") as f:
         f.write(b"# vtk DataFile Version 5.1\n")
@@ -537,19 +559,19 @@ def write(filename, mesh, binary=True):
 
         # write points and cells
         _write_points(f, points, binary)
-        _write_cells(f, mesh.cells, binary)
+        _write_cells(f, cells, binary)
 
         # write point data
-        if mesh.point_data:
+        if point_data:
             num_points = mesh.points.shape[0]
             f.write(f"POINT_DATA {num_points}\n".encode())
-            _write_field_data(f, mesh.point_data, binary)
+            _write_field_data(f, point_data, binary)
 
         # write cell data
-        if mesh.cell_data:
-            total_num_cells = sum(len(c.data) for c in mesh.cells)
+        if cell_data:
+            total_num_cells = sum(len(c.data) for c in cells)
             f.write(f"CELL_DATA {total_num_cells}\n".encode())
-            _write_field_data(f, mesh.cell_data, binary)
+            _write_field_data(f, cell_data, binary)
 
 
 def _write_points(f, points, binary):

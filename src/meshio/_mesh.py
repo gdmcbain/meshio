@@ -5,7 +5,8 @@ import copy
 import numpy as np
 from numpy.typing import ArrayLike
 
-from ._common import num_nodes_per_cell, warn
+from . import _meshlike
+from ._common import warn
 
 topological_dimension = {
     "line": 1,
@@ -126,65 +127,18 @@ class Mesh:
         gmsh_periodic=None,
         info=None,
     ):
-        self.points = np.asarray(points)
-        if isinstance(cells, dict):
-            # Let's not deprecate this for now.
-            # warn(
-            #     "cell dictionaries are deprecated, use list of tuples, e.g., "
-            #     '[("triangle", [[0, 1, 2], ...])]',
-            #     DeprecationWarning,
-            # )
-            # old dict, deprecated
-            #
-            # convert dict to list of tuples
-            cells = list(cells.items())
-
-        self.cells = []
-        for cell_block in cells:
-            if isinstance(cell_block, tuple):
-                cell_type, data = cell_block
-                cell_block = CellBlock(
-                    cell_type,
-                    # polyhedron data cannot be converted to numpy arrays
-                    # because the sublists don't all have the same length
-                    data if cell_type.startswith("polyhedron") else np.asarray(data),
-                )
-            self.cells.append(cell_block)
-
-        self.point_data = {} if point_data is None else point_data
-        self.cell_data = {} if cell_data is None else cell_data
-        self.field_data = {} if field_data is None else field_data
-        self.point_sets = {} if point_sets is None else point_sets
-        self.cell_sets = {} if cell_sets is None else cell_sets
-        self.gmsh_periodic = gmsh_periodic
-        self.info = info
-
-        # assert point data consistency and convert to numpy arrays
-        for key, item in self.point_data.items():
-            self.point_data[key] = np.asarray(item)
-            if len(self.point_data[key]) != len(self.points):
-                raise ValueError(
-                    f"len(points) = {len(self.points)}, "
-                    f'but len(point_data["{key}"]) = {len(self.point_data[key])}'
-                )
-
-        # assert cell data consistency and convert to numpy arrays
-        for key, data in self.cell_data.items():
-            if len(data) != len(cells):
-                raise ValueError(
-                    f"Incompatible cell data '{key}'. "
-                    f"{len(cells)} cell blocks, but '{key}' has {len(data)} blocks."
-                )
-
-            for k in range(len(data)):
-                data[k] = np.asarray(data[k])
-                if len(data[k]) != len(self.cells[k]):
-                    raise ValueError(
-                        "Incompatible cell data. "
-                        + f"Cell block {k} ('{self.cells[k].type}') "
-                        + f"has length {len(self.cells[k])}, but "
-                        + f"corresponding cell data item has length {len(data[k])}."
-                    )
+        _meshlike.init_mesh_like(
+            self,
+            points,
+            cells,
+            point_data,
+            cell_data,
+            field_data,
+            point_sets,
+            cell_sets,
+            gmsh_periodic,
+            info,
+        )
 
     def __repr__(self):
         lines = ["<meshio mesh object>", f"  Number of points: {len(self.points)}"]
@@ -241,68 +195,22 @@ class Mesh:
         write(path_or_buf, self, file_format, **kwargs)
 
     def get_cells_type(self, cell_type: str):
-        if not any(c.type == cell_type for c in self.cells):
-            return np.empty((0, num_nodes_per_cell[cell_type]), dtype=int)
-        return np.concatenate([c.data for c in self.cells if c.type == cell_type])
+        return _meshlike.get_cells_type(self, cell_type)
 
     def get_cell_data(self, name: str, cell_type: str):
-        return np.concatenate(
-            [d for c, d in zip(self.cells, self.cell_data[name]) if c.type == cell_type]
-        )
+        return _meshlike.get_cell_data(self, name, cell_type)
 
     @property
     def cells_dict(self):
-        cells_dict = {}
-        for cell_block in self.cells:
-            if cell_block.type not in cells_dict:
-                cells_dict[cell_block.type] = []
-            cells_dict[cell_block.type].append(cell_block.data)
-        # concatenate
-        for key, value in cells_dict.items():
-            cells_dict[key] = np.concatenate(value)
-        return cells_dict
+        return _meshlike.cells_dict(self)
 
     @property
     def cell_data_dict(self):
-        cell_data_dict = {}
-        for key, value_list in self.cell_data.items():
-            cell_data_dict[key] = {}
-            for value, cell_block in zip(value_list, self.cells):
-                if cell_block.type not in cell_data_dict[key]:
-                    cell_data_dict[key][cell_block.type] = []
-                cell_data_dict[key][cell_block.type].append(value)
-
-            for cell_type, val in cell_data_dict[key].items():
-                cell_data_dict[key][cell_type] = np.concatenate(val)
-        return cell_data_dict
+        return _meshlike.cell_data_dict(self)
 
     @property
     def cell_sets_dict(self):
-        sets_dict = {}
-        for key, member_list in self.cell_sets.items():
-            sets_dict[key] = {}
-            offsets = {}
-            for members, cells in zip(member_list, self.cells):
-                if members is None:
-                    continue
-                if cells.type in offsets:
-                    offset = offsets[cells.type]
-                    offsets[cells.type] += cells.data.shape[0]
-                else:
-                    offset = 0
-                    offsets[cells.type] = cells.data.shape[0]
-                if cells.type in sets_dict[key]:
-                    sets_dict[key][cells.type].append(members + offset)
-                else:
-                    sets_dict[key][cells.type] = [members + offset]
-        return {
-            key: {
-                cell_type: np.concatenate(members)
-                for cell_type, members in sets.items()
-                if sum(map(np.size, members))
-            }
-            for key, sets in sets_dict.items()
-        }
+        return _meshlike.cell_sets_dict(self)
 
     @classmethod
     def read(cls, path_or_buf, file_format=None):
@@ -316,48 +224,16 @@ class Mesh:
     def cell_sets_to_data(self, data_name: str | None = None):
         # If possible, convert cell sets to integer cell data. This is possible if all
         # cells appear exactly in one group.
-        default_value = -1
-        if len(self.cell_sets) > 0:
-            intfun = []
-            for k, c in enumerate(zip(*self.cell_sets.values())):
-                # Go for -1 as the default value. (NaN is not int.)
-                arr = np.full(len(self.cells[k]), default_value, dtype=int)
-                for i, cc in enumerate(c):
-                    if cc is None:
-                        continue
-                    arr[cc] = i
-                intfun.append(arr)
-
-            for item in intfun:
-                num_default = np.sum(item == default_value)
-                if num_default > 0:
-                    warn(
-                        f"{num_default} cells are not part of any cell set. "
-                        f"Using default value {default_value}."
-                    )
-                    break
-
-            if data_name is None:
-                data_name = "-".join(self.cell_sets.keys())
+        result = _meshlike.cell_sets_to_data(self, data_name)
+        if result is not None:
+            data_name, intfun = result
             self.cell_data[data_name] = intfun
             self.cell_sets = {}
 
     def point_sets_to_data(self, join_char: str = "-") -> None:
-        # now for the point sets
-        # Go for -1 as the default value. (NaN is not int.)
-        default_value = -1
-        if len(self.point_sets) > 0:
-            intfun = np.full(len(self.points), default_value, dtype=int)
-            for i, cc in enumerate(self.point_sets.values()):
-                intfun[cc] = i
-
-            if np.any(intfun == default_value):
-                warn(
-                    "Not all points are part of a point set. "
-                    f"Using default value {default_value}."
-                )
-
-            data_name = join_char.join(self.point_sets.keys())
+        result = _meshlike.point_sets_to_data(self, join_char)
+        if result is not None:
+            data_name, intfun = result
             self.point_data[data_name] = intfun
             self.point_sets = {}
 

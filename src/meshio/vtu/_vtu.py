@@ -11,6 +11,7 @@ import zlib
 
 import numpy as np
 
+from .. import _meshlike
 from ..__about__ import __version__
 from .._common import info, join_strings, raw_from_cell_data, replace_space, warn
 from .._exceptions import CorruptionError, ReadError
@@ -626,6 +627,12 @@ def write(filename, mesh, binary=True, compression="zlib", header_type=None):
     else:
         points = mesh.points
 
+    # Writers observe their input; they must not mutate it. Keep format-specific
+    # transforms on writer-local copies (see _meshlike).
+    point_data = mesh.point_data
+    cell_data = mesh.cell_data
+    cells = mesh.cells
+
     if mesh.point_sets:
         info(
             "VTU format cannot write point_sets. Converting them to point_data...",
@@ -633,7 +640,10 @@ def write(filename, mesh, binary=True, compression="zlib", header_type=None):
         )
         key, _ = join_strings(list(mesh.point_sets.keys()))
         key, _ = replace_space(key)
-        mesh.point_sets_to_data(key)
+        result = _meshlike.point_sets_to_data(mesh, join_char=key)
+        if result is not None:
+            name, intfun = result
+            point_data = {**point_data, name: intfun}
 
     if mesh.cell_sets:
         info(
@@ -642,7 +652,10 @@ def write(filename, mesh, binary=True, compression="zlib", header_type=None):
         )
         key, _ = join_strings(list(mesh.cell_sets.keys()))
         key, _ = replace_space(key)
-        mesh.cell_sets_to_data(key)
+        result = _meshlike.cell_sets_to_data(mesh, data_name=key)
+        if result is not None:
+            name, intfun = result
+            cell_data = {**cell_data, name: intfun}
 
     vtk_file = ET.Element(
         "VTKFile",
@@ -668,11 +681,13 @@ def write(filename, mesh, binary=True, compression="zlib", header_type=None):
         assert compression in compressions
         vtk_file.set("compressor", compressions[compression])
 
-    # swap the data to match the system byteorder
+    # swap the data to match the system byteorder, into writer-local copies so the
+    # input mesh is not mutated.
     # Don't use byteswap to make sure that the dtype is changed; see
     # <https://github.com/numpy/numpy/issues/10372>.
     points = points.astype(points.dtype.newbyteorder("="), copy=False)
-    for k, cell_block in enumerate(mesh.cells):
+    swapped_cells = []
+    for cell_block in cells:
         cell_type = cell_block.type
         data = cell_block.data
         # Treatment of polyhedra is different from other types
@@ -686,19 +701,22 @@ def write(filename, mesh, binary=True, compression="zlib", header_type=None):
                         face_info.astype(face_info.dtype.newbyteorder("="), copy=False)
                     )
                 new_cell_info.append(new_face_info)
-            mesh.cells[k] = CellBlock(cell_type, new_cell_info)
+            swapped_cells.append(CellBlock(cell_type, new_cell_info))
         else:
-            mesh.cells[k] = CellBlock(
-                cell_type, data.astype(data.dtype.newbyteorder("="), copy=False)
+            swapped_cells.append(
+                CellBlock(
+                    cell_type, data.astype(data.dtype.newbyteorder("="), copy=False)
+                )
             )
-    for key, data in mesh.point_data.items():
-        mesh.point_data[key] = data.astype(data.dtype.newbyteorder("="), copy=False)
-
-    for data in mesh.cell_data.values():
-        for k, dat in enumerate(data):
-            data[k] = dat.astype(dat.dtype.newbyteorder("="), copy=False)
-    for key, data in mesh.field_data.items():
-        mesh.field_data[key] = data.astype(data.dtype.newbyteorder("="), copy=False)
+    cells = swapped_cells
+    point_data = {
+        key: data.astype(data.dtype.newbyteorder("="), copy=False)
+        for key, data in point_data.items()
+    }
+    cell_data = {
+        key: [dat.astype(dat.dtype.newbyteorder("="), copy=False) for dat in data]
+        for key, data in cell_data.items()
+    }
 
     def numpy_to_xml_array(parent, name, data):
         vtu_type = numpy_to_vtu_type[data.dtype]
@@ -793,7 +811,7 @@ def write(filename, mesh, binary=True, compression="zlib", header_type=None):
 
     grid = ET.SubElement(vtk_file, "UnstructuredGrid")
 
-    total_num_cells = sum(len(c.data) for c in mesh.cells)
+    total_num_cells = sum(len(c.data) for c in cells)
     piece = ET.SubElement(
         grid,
         "Piece",
@@ -806,7 +824,7 @@ def write(filename, mesh, binary=True, compression="zlib", header_type=None):
         pts = ET.SubElement(piece, "Points")
         numpy_to_xml_array(pts, "Points", points)
 
-    if mesh.cells is not None and len(mesh.cells) > 0:
+    if cells is not None and len(cells) > 0:
         cls = ET.SubElement(piece, "Cells")
 
         faces = None
@@ -820,7 +838,7 @@ def write(filename, mesh, binary=True, compression="zlib", header_type=None):
             # block may be useful for those as well.
             con = []
             num_nodes_per_cell = []
-            for block in mesh.cells:
+            for block in cells:
                 for cell in block.data:
                     nodes_this_cell = []
                     for face in cell:
@@ -841,7 +859,7 @@ def write(filename, mesh, binary=True, compression="zlib", header_type=None):
         else:
             # create connectivity, offset, type arrays
             connectivity = []
-            for v in mesh.cells:
+            for v in cells:
                 d = v.data
                 new_order = meshio_to_vtk_order(v.type)
                 if new_order is not None:
@@ -853,7 +871,7 @@ def write(filename, mesh, binary=True, compression="zlib", header_type=None):
             offsets = [
                 v.data.shape[1]
                 * np.arange(1, v.data.shape[0] + 1, dtype=connectivity.dtype)
-                for v in mesh.cells
+                for v in cells
             ]
             for k in range(1, len(offsets)):
                 offsets[k] += offsets[k - 1][-1]
@@ -861,7 +879,7 @@ def write(filename, mesh, binary=True, compression="zlib", header_type=None):
 
         # types
         types_array = []
-        for cell_block in mesh.cells:
+        for cell_block in cells:
             key = cell_block.type
             # some adaptions for polyhedron
             if key.startswith("polyhedron"):
@@ -894,14 +912,14 @@ def write(filename, mesh, binary=True, compression="zlib", header_type=None):
             numpy_to_xml_array(cls, "faces", np.array(faces, dtype=int))
             numpy_to_xml_array(cls, "faceoffsets", np.array(faceoffsets, dtype=int))
 
-    if mesh.point_data:
+    if point_data:
         pd = ET.SubElement(piece, "PointData")
-        for name, data in mesh.point_data.items():
+        for name, data in point_data.items():
             numpy_to_xml_array(pd, name, data)
 
-    if mesh.cell_data:
+    if cell_data:
         cd = ET.SubElement(piece, "CellData")
-        for name, data in raw_from_cell_data(mesh.cell_data).items():
+        for name, data in raw_from_cell_data(cell_data).items():
             numpy_to_xml_array(cd, name, data)
 
     # write_xml(filename, vtk_file, pretty_xml)

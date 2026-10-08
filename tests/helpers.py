@@ -662,7 +662,7 @@ def write_read(tmp_path, writer, reader, input_mesh, atol, extension=".dat"):
 
     # Make sure the output is writeable
     assert mesh.points.flags["WRITEABLE"]
-    for cells in input_mesh.cells:
+    for cells in mesh.cells:
         if isinstance(cells.data, np.ndarray):
             assert cells.data.flags["WRITEABLE"]
         else:
@@ -719,9 +719,12 @@ def write_read(tmp_path, writer, reader, input_mesh, atol, extension=".dat"):
             assert np.array_equal(cells0.data, cells1.data)
 
     for key in input_mesh.point_data.keys():
-        assert np.allclose(
-            input_mesh.point_data[key], mesh.point_data[key], atol=atol, rtol=0.0
-        )
+        expected = input_mesh.point_data[key]
+        # writers may pad trailing dims (e.g. 2D vectors to 3D for VTK); compare the
+        # read-back data sliced to the input's shape so the test does not depend on
+        # the writer having mutated its input.
+        actual = mesh.point_data[key][tuple(slice(0, s) for s in expected.shape)]
+        assert np.allclose(expected, actual, atol=atol, rtol=0.0)
 
     print(input_mesh.cell_data)
     print()
@@ -729,6 +732,7 @@ def write_read(tmp_path, writer, reader, input_mesh, atol, extension=".dat"):
     for name, cell_type_data in input_mesh.cell_data.items():
         for d0, d1 in zip(cell_type_data, mesh.cell_data[name]):
             # assert d0.dtype == d1.dtype, (d0.dtype, d1.dtype)
+            d1 = d1[tuple(slice(0, s) for s in d0.shape)]
             assert np.allclose(d0, d1, atol=atol, rtol=0.0)
 
     for name, data in input_mesh.field_data.items():

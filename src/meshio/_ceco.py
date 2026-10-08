@@ -4,6 +4,7 @@ import copy
 
 from numpy.typing import ArrayLike
 
+from . import _meshlike
 from ._mesh import CellBlock, Mesh
 
 
@@ -11,8 +12,8 @@ class Ceco:
     """Neutral cell-complex representation (CEll COmplex).
 
     Independent of ``meshio.Mesh`` (not a subclass). For the ordinary
-    points-plus-cells case it shares Mesh's data vocabulary and reuses Mesh
-    operations by internal delegation; no Mesh instance backs a Ceco.
+    points-plus-cells case it shares Mesh's data vocabulary and the shared
+    operations in :mod:`meshio._meshlike`; no Mesh instance backs a Ceco.
     """
 
     def __init__(
@@ -27,9 +28,7 @@ class Ceco:
         gmsh_periodic=None,
         info=None,
     ):
-        # Reuse Mesh's construction and validation to populate this object's own
-        # attributes; this stores no Mesh instance.
-        Mesh.__init__(
+        _meshlike.init_mesh_like(
             self,
             points,
             cells,
@@ -70,32 +69,40 @@ class Ceco:
 
         write(path_or_buf, self, file_format, **kwargs)
 
-    # Operations below reuse Mesh's implementations applied to this object's own
-    # attributes (duck typing), keeping behaviour identical without inheritance.
+    # Operations below reuse the shared _meshlike implementations applied to this
+    # object's own attributes, keeping behaviour identical without inheritance.
 
     def get_cells_type(self, cell_type: str):
-        return Mesh.get_cells_type(self, cell_type)
+        return _meshlike.get_cells_type(self, cell_type)
 
     def get_cell_data(self, name: str, cell_type: str):
-        return Mesh.get_cell_data(self, name, cell_type)
+        return _meshlike.get_cell_data(self, name, cell_type)
 
     def cell_sets_to_data(self, data_name: str | None = None):
-        return Mesh.cell_sets_to_data(self, data_name)
+        result = _meshlike.cell_sets_to_data(self, data_name)
+        if result is not None:
+            data_name, intfun = result
+            self.cell_data[data_name] = intfun
+            self.cell_sets = {}
 
     def point_sets_to_data(self, join_char: str = "-") -> None:
-        return Mesh.point_sets_to_data(self, join_char)
+        result = _meshlike.point_sets_to_data(self, join_char)
+        if result is not None:
+            data_name, intfun = result
+            self.point_data[data_name] = intfun
+            self.point_sets = {}
 
     @property
     def cells_dict(self):
-        return Mesh.cells_dict.fget(self)
+        return _meshlike.cells_dict(self)
 
     @property
     def cell_data_dict(self):
-        return Mesh.cell_data_dict.fget(self)
+        return _meshlike.cell_data_dict(self)
 
     @property
     def cell_sets_dict(self):
-        return Mesh.cell_sets_dict.fget(self)
+        return _meshlike.cell_sets_dict(self)
 
     @classmethod
     def from_meshio(cls, mesh: Mesh, copy: bool = False) -> Ceco:

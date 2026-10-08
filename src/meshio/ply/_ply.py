@@ -442,22 +442,25 @@ def write(filename, mesh: Mesh, binary: bool = True):  # noqa: C901
             fh.write(f"property {type_name} {key}\n".encode())
             pd.append(value)
 
+        # Writers observe their input; they must not mutate it. Work on a local
+        # list of cell blocks so the int32 cast below does not alter the input.
+        cells = list(mesh.cells)
+
         num_cells = 0
         legal_cell_types = ["vertex", "line", "triangle", "quad", "polygon"]
-        for cell_block in mesh.cells:
+        for cell_block in cells:
             if cell_block.type in legal_cell_types:
                 num_cells += cell_block.data.shape[0]
 
         if num_cells > 0:
             fh.write(f"element face {num_cells:d}\n".encode())
 
-            # possibly cast down to int32
-            # TODO don't alter the mesh data
+            # possibly cast down to int32 (on local copies, not the input)
             has_cast = False
-            for k, cell_block in enumerate(mesh.cells):
+            for k, cell_block in enumerate(cells):
                 if cell_block.data.dtype == np.int64:
                     has_cast = True
-                    mesh.cells[k] = CellBlock(
+                    cells[k] = CellBlock(
                         cell_block.type, cell_block.data.astype(np.int32)
                     )
 
@@ -466,7 +469,7 @@ def write(filename, mesh: Mesh, binary: bool = True):  # noqa: C901
 
             # assert that all cell dtypes are equal
             cell_dtype = None
-            for cell_block in mesh.cells:
+            for cell_block in cells:
                 if cell_dtype is None:
                     cell_dtype = cell_block.data.dtype
                 if cell_block.data.dtype != cell_dtype:
@@ -485,7 +488,7 @@ def write(filename, mesh: Mesh, binary: bool = True):  # noqa: C901
             fh.write(out.tobytes())
 
             # cells
-            for cell_block in mesh.cells:
+            for cell_block in cells:
                 if cell_block.type not in legal_cell_types:
                     warn(
                         f'cell_type "{cell_block.type}" is not supported by PLY format '
@@ -508,7 +511,7 @@ def write(filename, mesh: Mesh, binary: bool = True):  # noqa: C901
             fh.write(out.encode())
 
             # cells
-            for cell_block in mesh.cells:
+            for cell_block in cells:
                 if cell_block.type not in legal_cell_types:
                     warn(
                         f'cell_type "{cell_block.type}" is not supported by PLY format '
