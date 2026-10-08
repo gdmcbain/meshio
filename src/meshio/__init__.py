@@ -32,6 +32,7 @@ from . import (
     xdmf,
 )
 from .__about__ import __version__
+from ._ceco import Ceco
 from ._exceptions import ReadError, WriteError
 from ._helpers import (
     deregister_format,
@@ -82,6 +83,7 @@ __all__ = [
     "write_points_cells",
     "extension_to_filetypes",
     "Mesh",
+    "Ceco",
     "CellBlock",
     "ReadError",
     "WriteError",
