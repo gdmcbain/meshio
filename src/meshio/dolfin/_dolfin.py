@@ -207,7 +207,8 @@ def _write_cell_data(filename, dim, cell_data):
     )
 
     for k, value in enumerate(cell_data):
-        ET.SubElement(mesh_function, "entity", index=str(k), value=repr(value))
+        # value.item(): NumPy 2.0 scalar repr is "np.int64(3)", not "3".
+        ET.SubElement(mesh_function, "entity", index=str(k), value=str(value.item()))
 
     tree = ET.ElementTree(dolfin)
     tree.write(filename)

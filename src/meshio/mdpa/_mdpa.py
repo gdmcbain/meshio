@@ -418,14 +418,15 @@ def _write_data(fh, tag, name, data, binary):
         data = data[:, 0]
 
     # Actually write the data
-    fmt = " ".join(["{}"] + ["{!r}"] * num_components) + "\n"
+    # Format Python scalars: NumPy 2.0 scalar repr is "np.float64(0.0)".
+    fmt = " ".join(["{}"] * (1 + num_components)) + "\n"
     # TODO unify
     if num_components == 1:
         for k, x in enumerate(data):
-            fh.write(fmt.format(k + 1, x).encode())
+            fh.write(fmt.format(k + 1, x.item()).encode())
     else:
         for k, x in enumerate(data):
-            fh.write(fmt.format(k + 1, *x).encode())
+            fh.write(fmt.format(k + 1, *x.tolist()).encode())
 
     fh.write(f"End {tag} {name}\n\n".encode())
 

@@ -145,7 +145,11 @@ def read_buffer(f, file_type):
 def _write_section(f, file_type, array, dtype):
     if file_type["type"] == "ascii":
         ncols = array.shape[1]
-        fmt = " ".join(["%r"] * ncols)
+        # Choose a bare numeric format by kind: NumPy 2.0 scalar repr breaks "%r".
+        if array.dtype.kind in "iu":
+            fmt = " ".join(["%d"] * ncols)
+        else:
+            fmt = " ".join(["%.16e"] * ncols)
         np.savetxt(f, array, fmt=fmt)
     else:
         array.astype(dtype).tofile(f)
